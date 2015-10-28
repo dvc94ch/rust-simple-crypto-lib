@@ -1,0 +1,8 @@
+[package]
+name = "simple_crypto_lib"
+version = "0.1.0"
+authors = ["David Craven <david@craven.ch>"]
+
+[dependencies]
+openssl = "0.6.7"
+crypto = "0.0.2"
