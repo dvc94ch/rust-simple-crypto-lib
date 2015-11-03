@@ -1,32 +1,29 @@
 use traits::Padder;
 
-pub struct PkcsPadder;
+pub struct Pkcs7Padder {
+    blocksize: usize,
+}
 
-impl PkcsPadder {
-    pub fn new() -> PkcsPadder {
-        PkcsPadder {}
+impl Pkcs7Padder {
+    pub fn new(blocksize: usize) -> Pkcs7Padder {
+        Pkcs7Padder {
+            blocksize: blocksize,
+        }
     }
 }
 
-impl Padder for PkcsPadder {
-    fn pad(&self, bytes: &Vec<u8>) -> Vec<u8> {
-        let padding_size = 16 - bytes.len() % 16;
-        let padded_length = bytes.len() + padding_size;
-        let mut padded_bytes: Vec<u8> = Vec::with_capacity(padded_length);
-        let padding = vec![4u8; padding_size];
-        unsafe {
-            padded_bytes.set_len(padded_length);
-            ::std::slice::bytes::copy_memory(&bytes[..], &mut padded_bytes[..]);
-            ::std::slice::bytes::copy_memory(&padding[..], &mut padded_bytes[bytes.len()..padded_length]);
-        }
-        padded_bytes
+impl Padder for Pkcs7Padder {
+    fn pad(&self, bytes: &[u8]) -> Vec<u8> {
+        let mut bytes = bytes.to_vec();
+        let mut padding = self.blocksize - bytes.len() % self.blocksize;
+        if padding == 0 { padding = 16; }
+        bytes.append(&mut vec![padding as u8; padding]);
+        bytes
     }
 
-    fn unpad(&self, mut bytes: Vec<u8>) -> Vec<u8> {
-        loop {
-            if bytes.len() == 0 || bytes[bytes.len() - 1] != 4 { break; }
-            bytes.pop();
-        }
-        bytes
+    fn unpad(&self, bytes: &[u8]) -> Vec<u8> {
+        let padding = bytes[bytes.len() - 1] as usize;
+        if padding > self.blocksize { return bytes.to_vec(); }
+        bytes[0..(bytes.len() - padding)].to_vec()
     }
 }

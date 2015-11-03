@@ -6,3 +6,4 @@ authors = ["David Craven <david@craven.ch>"]
 [dependencies]
 openssl = "0.6.7"
 crypto = "0.0.2"
+rand = "0.3"

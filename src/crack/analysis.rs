@@ -53,12 +53,12 @@ pub fn english_score(data: &Vec<u8>) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ascii;
+    use utils;
 
     #[test]
     fn test_hamming_distance() {
-        let bytes1 = ascii::from_ascii(&String::from("this is a test"));
-        let bytes2 = ascii::from_ascii(&String::from("wokka wokka!!!"));
+        let bytes1 = utils::from_ascii(&String::from("this is a test"));
+        let bytes2 = utils::from_ascii(&String::from("wokka wokka!!!"));
         let dist = hamming_distance(&bytes1[..], &bytes2[..]);
         assert_eq!(dist, 37);
     }

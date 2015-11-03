@@ -1,5 +1,5 @@
 use openssl::crypto::symm::{Crypter, Mode, Type};
-use traits::Cipher;
+use traits::{BlockCipher};
 
 pub struct AesCipher {
     key: Vec<u8>,
@@ -30,7 +30,7 @@ impl AesCipher {
     }
 }
 
-impl Cipher for AesCipher {
+impl BlockCipher for AesCipher {
     fn encrypt_block(&self, block: &[u8]) -> Vec<u8> {
         self.aes(Mode::Encrypt, &block)
     }
@@ -42,17 +42,17 @@ impl Cipher for AesCipher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ascii;
-    use traits::Cipher;
+    use traits::{BlockCipher};
+    use utils;
 
     #[test]
     fn test_aes_cipher() {
-        let key = ascii::from_ascii(&String::from("YELLOW SUBMARINE"));
+        let key = utils::from_ascii(&String::from("YELLOW SUBMARINE"));
         let aes = AesCipher::new(key);
-        let bytes = ascii::from_ascii(&String::from("YELLOW SUBMARINE"));
+        let bytes = utils::from_ascii(&String::from("YELLOW SUBMARINE"));
 
         let encrypted_blocks = aes.encrypt_block(&bytes[..]);
         let decrypted_blocks = aes.decrypt_block(&encrypted_blocks[..]);
-        assert_eq!(ascii::to_ascii(&decrypted_blocks), "YELLOW SUBMARINE");
+        assert_eq!(utils::to_ascii(&decrypted_blocks), "YELLOW SUBMARINE");
     }
 }

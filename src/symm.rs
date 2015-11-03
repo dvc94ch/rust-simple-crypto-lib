@@ -1,133 +1,123 @@
-use xor::xor;
-use traits::{Cipher, Padder};
 use aes::AesCipher;
-use padder::PkcsPadder;
+use padder::Pkcs7Padder;
+use traits::{BlockCipher, Padder, Mode};
+use utils::{BlockIter, random_bytes};
+use xor::xor;
 
-pub trait Mode {
-    fn encrypt(&self, bytes: &Vec<u8>) -> Vec<u8>;
-    fn decrypt(&self, bytes: &Vec<u8>) -> Vec<u8>;
-}
-
-pub struct EcbMode<C: Cipher, P: Padder> {
-    cipher: C,
+pub struct EcbMode<C: BlockCipher, P: Padder> {
+    crypter: C,
     padder: P,
 }
 
-pub struct CbcMode<C: Cipher, P: Padder> {
-    cipher: C,
+impl <C, P> EcbMode<C, P> where C: BlockCipher, P: Padder {
+    pub fn new(crypter: C, padder: P) -> EcbMode<C, P> {
+        EcbMode {
+            crypter: crypter,
+            padder: padder,
+        }
+    }
+}
+pub struct CbcMode<C: BlockCipher, P: Padder> {
+    crypter: C,
     padder: P,
-    iv: [u8; 16],
+}
+
+impl <C, P> CbcMode<C, P> where C: BlockCipher, P: Padder {
+    pub fn new(crypter: C, padder: P) -> CbcMode<C, P> {
+        CbcMode {
+            crypter: crypter,
+            padder: padder,
+        }
+    }
 }
 
 pub struct AesEcbMode;
 
 impl AesEcbMode {
-    pub fn new(key: Vec<u8>) -> EcbMode<AesCipher, PkcsPadder> {
-        let cipher = AesCipher::new(key);
-        let padder = PkcsPadder {};
-        EcbMode {
-            cipher: cipher,
-            padder: padder,
-        }
+    pub fn new(key: Vec<u8>) -> EcbMode<AesCipher, Pkcs7Padder> {
+        EcbMode::new(AesCipher::new(key), Pkcs7Padder::new(16))
     }
 }
 
 pub struct AesCbcMode;
 
 impl AesCbcMode {
-    pub fn new(key: Vec<u8>, iv: [u8; 16]) -> CbcMode<AesCipher, PkcsPadder> {
-        let cipher = AesCipher::new(key);
-        let padder = PkcsPadder {};
-        CbcMode {
-            cipher: cipher,
-            padder: padder,
-            iv: iv,
-        }
+    pub fn new(key: Vec<u8>) -> CbcMode<AesCipher, Pkcs7Padder> {
+        CbcMode::new(AesCipher::new(key), Pkcs7Padder::new(16))
     }
 }
 
-impl Mode for EcbMode<AesCipher, PkcsPadder> {
-    fn encrypt(&self, bytes: &Vec<u8>) -> Vec<u8> {
-        let bytes = self.padder.pad(&bytes);
-        let mut cipher_text: Vec<u8> = Vec::with_capacity(bytes.len());
-        unsafe {
-            cipher_text.set_len(bytes.len());
-            for offset in (0..bytes.len()).step_by(16) {
-                let encrypted_block = self.cipher.encrypt_block(&bytes[offset..(offset + 16)]);
-                ::std::slice::bytes::copy_memory(&encrypted_block[..], &mut cipher_text[offset..(offset + 16)]);
-            }
+impl <C, P> Mode for EcbMode<C, P> where C: BlockCipher, P: Padder {
+    fn encrypt(&self, plain: &[u8]) -> Vec<u8> {
+        let plain = self.padder.pad(plain);
+        let mut cipher: Vec<u8> = Vec::with_capacity(plain.len());
+        for block in BlockIter::new(plain) {
+            cipher.append(&mut self.crypter.encrypt_block(&block[..]))
         }
-        cipher_text
+        cipher
     }
 
-    fn decrypt(&self, bytes: &Vec<u8>) -> Vec<u8> {
-        let mut plain_text: Vec<u8> = Vec::with_capacity(bytes.len());
-        unsafe {
-            plain_text.set_len(bytes.len());
-            for offset in (0..bytes.len()).step_by(16) {
-                let decrypted_block = self.cipher.decrypt_block(&bytes[offset..(offset + 16)]);
-                ::std::slice::bytes::copy_memory(&decrypted_block[..], &mut plain_text[offset..(offset + 16)]);
-            }
+    fn decrypt(&self, cipher: &[u8]) -> Vec<u8> {
+        let mut plain: Vec<u8> = Vec::with_capacity(cipher.len());
+        for block in BlockIter::new(cipher.to_vec()) {
+            plain.append(&mut self.crypter.decrypt_block(&block[..]));
         }
-        self.padder.unpad(plain_text)
+        self.padder.unpad(&plain[..])
     }
 }
 
-impl Mode for CbcMode<AesCipher, PkcsPadder> {
-    fn encrypt(&self, bytes: &Vec<u8>) -> Vec<u8> {
-        let bytes = self.padder.pad(&bytes);
-        let mut cipher_text: Vec<u8> = Vec::with_capacity(bytes.len());
-        unsafe {
-            cipher_text.set_len(bytes.len());
-            let mut encrypted_block = self.iv.to_vec();
-            for offset in (0..bytes.len()).step_by(16) {
-                let xored_block = xor(&encrypted_block[..], &bytes[offset..(offset + 16)]);
-                encrypted_block = self.cipher.encrypt_block(&xored_block[..]);
-                ::std::slice::bytes::copy_memory(&encrypted_block[..], &mut cipher_text[offset..(offset + 16)]);
-            }
+impl <C, P> Mode for CbcMode<C, P> where C: BlockCipher, P: Padder {
+    fn encrypt(&self, plain: &[u8]) -> Vec<u8> {
+        let plain = self.padder.pad(plain);
+        let mut cipher: Vec<u8> = Vec::with_capacity(plain.len() + 16);
+
+        let mut iv = random_bytes(16);
+        cipher.append(&mut iv[..].to_vec());
+
+        for block in BlockIter::new(plain) {
+            let block = &xor(&iv[..], &block[..]);
+            iv = self.crypter.encrypt_block(&block[..]);
+            cipher.append(&mut iv[..].to_vec());
         }
-        cipher_text
+        cipher
     }
 
-    fn decrypt(&self, bytes: &Vec<u8>) -> Vec<u8> {
-        let mut plain_text: Vec<u8> = Vec::with_capacity(bytes.len());
-        unsafe {
-            plain_text.set_len(bytes.len());
-            let mut encrypted_block = self.iv.to_vec();
-            for offset in (0..bytes.len()).step_by(16) {
-                let xored_block = self.cipher.decrypt_block(&bytes[offset..(offset + 16)]);
-                let decrypted_block = xor(&encrypted_block[..], &xored_block[..]);
-                ::std::slice::bytes::copy_memory(&decrypted_block[..], &mut plain_text[offset..(offset + 16)]);
-                encrypted_block = (&bytes[offset..(offset + 16)]).to_vec();
-            }
+    fn decrypt(&self, cipher: &[u8]) -> Vec<u8> {
+        let mut plain: Vec<u8> = Vec::with_capacity(cipher.len() - 16);
+
+        let mut iv = cipher[0..16].to_vec();
+        for block in BlockIter::new(cipher[16..cipher.len()].to_vec()) {
+            let decrypted_block = self.crypter.decrypt_block(&block[..]);
+            plain.append(&mut xor(&decrypted_block[..], &iv[..]));
+            iv = block[..].to_vec();
         }
-        self.padder.unpad(plain_text)
+        self.padder.unpad(&plain[..])
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ascii;
+    use utils;
+    use traits::Mode;
 
     #[test]
     fn test_aes_ecb_mode() {
-        let key = ascii::from_ascii(&String::from("YELLOW SUBMARINE"));
+        let key = utils::from_ascii(&String::from("YELLOW SUBMARINE"));
         let aes = AesEcbMode::new(key);
-        let plain_text = ascii::from_ascii(&String::from("An arbitrary length string"));
-        let cipher_text = aes.encrypt(&plain_text);
-        let decrypted_blocks = aes.decrypt(&cipher_text);
-        assert_eq!(ascii::to_ascii(&decrypted_blocks), "An arbitrary length string");
+        let plain = utils::from_ascii(&String::from("An arbitrary length string"));
+        let cipher = aes.encrypt(&plain);
+        let new_plain = aes.decrypt(&cipher);
+        assert_eq!(utils::to_ascii(&new_plain), "An arbitrary length string");
     }
 
     #[test]
     fn test_aes_cbc_mode() {
-        let key = ascii::from_ascii(&String::from("YELLOW SUBMARINE"));
-        let iv = [0u8; 16];
-        let aes = AesCbcMode::new(key, iv);
-        let plain_text = ascii::from_ascii(&String::from("An arbitrary length string"));
-        let cipher_text = aes.encrypt(&plain_text);
-        let decrypted_blocks = aes.decrypt(&cipher_text);
-        assert_eq!(ascii::to_ascii(&decrypted_blocks), "An arbitrary length string");
+        let key = utils::from_ascii(&String::from("YELLOW SUBMARINE"));
+        let aes = AesCbcMode::new(key);
+        let plain = utils::from_ascii(&String::from("An arbitrary length string"));
+        let cipher = aes.encrypt(&plain);
+        let new_plain = aes.decrypt(&cipher);
+        assert_eq!(utils::to_ascii(&new_plain), "An arbitrary length string");
     }
 }

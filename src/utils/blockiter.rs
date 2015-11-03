@@ -36,3 +36,40 @@ mod tests {
         }
     }
 }
+
+/*pub struct BlockIter {
+    block_start: usize,
+}
+
+impl BlockIter {
+    pub fn new() -> BlockIter {
+        BlockIter {
+            block_start: 0,
+        }
+    }
+    pub fn next<'a>(&mut self, bytes: &'a Vec<u8>) -> Option<Box<&'a[u8]>> {
+        if self.block_start >= bytes.len() { return None; }
+        let block_start = self.block_start;
+        let block_end = ::std::cmp::min(bytes.len(), self.block_start + 16);
+        self.block_start += 16;
+        Some(box &bytes[block_start..block_end])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_blockiter() {
+        let bytes = vec![0u8; 64];
+        let mut iter = BlockIter::new();
+        loop {
+            if let Some(block) = iter.next(&bytes) {
+                assert_eq!(*block, [0u8; 16]);
+            } else {
+                break;
+            }
+        }
+    }
+}*/
